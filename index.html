@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mood Tracker Heatmap</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    /* Basic styling for body and header */
+    body {
+      font-family: "Comic Sans MS", "Arial", sans-serif;
+      background-color: #f3f1f8;
+      color: #4c3c8c;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    h1 {
+      color: #ff6f91;
+      font-size: 36px;
+      margin-top: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    p {
+      color: #555;
+      font-size: 16px;
+    }
+
+    /* Tooltip Styling */
+    .tooltip {
+      position: absolute;
+      background-color: white;
+      border: 1px solid #ff6f91;
+      padding: 10px;
+      border-radius: 8px;
+      display: none;
+      pointer-events: none;
+      font-size: 12px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Container for chart */
+    #chart {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); /* Responsive grid for 5 months per row */
+      gap: 20px;
+      justify-content: center;
+      margin: 40px;
+    }
+
+    /* Styling for each month block */
+    .month-group {
+      background-color: #ffedf3;
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .month-group:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Month label styling */
+    .month-label {
+      font-weight: bold;
+      font-size: 18px;
+      color: #ff6f91;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    /* SVG (heatmap cells) */
+    .cell {
+      stroke: #fff;
+      cursor: pointer;
+      transition: fill 0.3s ease;
+    }
+
+    /* Date number inside cells */
+    .date-text {
+      font-size: 10px;
+      text-anchor: middle;
+      fill: #333;
+      font-weight: bold;
+      pointer-events: none; /* Prevent interaction with text */
+    }
+
+    /* Responsive layout for smaller screens */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 28px;
+      }
+      #chart {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      }
+    }
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 24px;
+      }
+      #chart {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      }
+      .month-label {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>🌸 Mood Tracker 2023 🌸</h1>
+  <p>A colorful heatmap showing daily mood levels.</p>
+  <div id="chart"></div>
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    // Set dimensions and margins for the heatmap cells
+    const cellSize = 20;
+    const cellMargin = 2;
+    const monthWidth = (cellSize + cellMargin) * 7 + 20; // 7 days a week
+    const monthHeight = (cellSize + cellMargin) * 6 + 40; // 6 weeks max
+
+    // Margin for the SVG container
+    const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+
+    // Color scale for mood levels
+    const colorScale = d3.scaleLinear()
+      .domain([0, 5]) // Mood levels from 0 (worst) to 5 (best)
+      .range(["#ffdeeb", "#ff6f91"]); // Light pink to hot pink
+
+    // Parse and format dates
+    const parseDate = d3.timeParse("%Y-%m-%d");
+    const formatDate = d3.timeFormat("%Y-%m-%d");
+
+    // Tooltip element for showing details on hover
+    const tooltip = d3.select("#tooltip");
+
+    // Load data from the JSON file
+    d3.json("data.json").then(data => {
+      data.forEach(d => d.date = parseDate(d.date));
+      
+
+      // Create the chart container
+      const chart = d3.select("#chart");
+
+      // Generate all months of the year (12 months)
+      const months = d3.range(12).map(monthIndex => {
+        const startOfMonth = new Date(2023, monthIndex, 1);
+        const daysInMonth = d3.timeDays(
+          startOfMonth,
+          d3.timeMonth.offset(startOfMonth, 1)
+        );
+        return { monthIndex, daysInMonth };
+      });
+
+      // Render each month
+      months.forEach(({ monthIndex, daysInMonth }) => {
+        const monthGroup = chart.append("div")
+          .attr("class", "month-group");
+
+        // Add month label
+        monthGroup.append("div")
+          .text(d3.timeFormat("%B")(new Date(2023, monthIndex)))
+          .attr("class", "month-label");
+
+        // Create an SVG container for the month
+        const svg = monthGroup.append("svg")
+          .attr("width", monthWidth)
+          .attr("height", monthHeight);
+
+        // Match data to days in the current month
+        const monthData = daysInMonth.map(day => {
+          const match = data.find(d => formatDate(d.date) === formatDate(day));
+          return { date: day, value: match ? match.value : null };
+        });
+
+        // Render cells for each day
+        svg.selectAll(".cell")
+          .data(monthData)
+          .enter().append("rect")
+          .attr("class", "cell")
+          .attr("width", cellSize)
+          .attr("height", cellSize)
+          .attr("x", d => d.date.getDay() * (cellSize + cellMargin))
+          .attr("y", d => d3.timeWeek.count(d3.timeMonth(d.date), d.date) * (cellSize + cellMargin))
+          .attr("fill", d => d.value !== null ? colorScale(d.value) : "#f8f9fa") // Default color for no data
+          .attr("rx", 5) // Rounded corners
+          .on("mouseover", function (event, d) {
+            const match = data.find(e => +e.date === +d.date);
+            tooltip.style("display", "block")
+              .html(`<strong>Date:</strong> ${d3.timeFormat("%B %d, %Y")(d.date)}<br>
+                     <strong>Mood:</strong> ${match ? match.value : "No Data"}`)
+              .style("left", (event.pageX + 10) + "px")
+              .style("top", (event.pageY - 10) + "px");
+          })
+          .on("mouseout", () => tooltip.style("display", "none"));
+
+        // Add date numbers inside each cell
+        svg.selectAll(".date-text")
+          .data(monthData)
+          .enter().append("text")
+          .attr("class", "date-text")
+          .attr("x", d => d.date.getDay() * (cellSize + cellMargin) + cellSize / 2)
+          .attr("y", d => d3.timeWeek.count(d3.timeMonth(d.date), d.date) * (cellSize + cellMargin) + cellSize / 2)
+          .text(d => d3.timeFormat("%d")(d.date));
+      });
+    });
+  </script>
+</body>
+</html>
